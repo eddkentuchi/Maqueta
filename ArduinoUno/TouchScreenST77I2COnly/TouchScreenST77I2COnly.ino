@@ -1,46 +1,20 @@
-/***********************************************2************************************
-*This program is a demo of how to use the touch function in a phone GUI
-*This demo was made for LCD modules with 8bit or 16bit data port.
-*This program requires the the LCDKIWI library.
-
-* File                : display_phonecall.ino
-* Hardware Environment: Arduino UNO&Mega2560
-* Build Environment   : Arduino
-
-*Set the pins to the correct ones for your development shield or breakout board.
-*This demo use the BREAKOUT BOARD only and use these 8bit data lines to the LCD,
-*pin usage as follow:
-*                  LCD_CS  LCD_CD  LCD_WR  LCD_RD  LCD_RST  SD_SS  SD_DI  SD_DO  SD_SCK 
-*     Arduino Uno    A3      A2      A1      A0      A4      10     11     12      13                            
-*Arduino Mega2560    A3      A2      A1      A0      A4      10     11     12      13                           
-
-*                  LCD_D0  LCD_D1  LCD_D2  LCD_D3  LCD_D4  LCD_D5  LCD_D6  LCD_D7  
-*     Arduino Uno    8       9       2       3       4       5       6       7
-*Arduino Mega2560    8       9       2       3       4       5       6       7 
-
-*Remember to set the pins to suit your display module!
-*
-* @attention
-*
-* THE PRESENT FIRMWARE WHICH IS FOR GUIDANCE ONLY AIMS AT PROVIDING CUSTOMERS
-* WITH CODING INFORMATION REGARDING THEIR PRODUCTS IN ORDER FOR THEM TO SAVE
-* TIME. AS A RESULT, QD electronic SHALL NOT BE HELD LIABLE FOR ANY
-* DIRECT, INDIRECT OR CONSEQUENTIAL DAMAGES WITH RESPECT TO ANY CLAIMS ARISING
-* FROM THE CONTENT OF SUCH FIRMWARE AND/OR THE USE MADE BY CUSTOMERS OF THE 
-* CODING INFORMATION CONTAINED HEREIN IN CONNECTION WITH THEIR PRODUCTS.
-**********************************************************************************/
 
 #include <TouchScreen.h> //touch library
 #include <LCDWIKI_GUI.h> //Core graphics library
 #include <LCDWIKI_KBV.h> //Hardware-specific library
 #include <string.h>
 #include <Wire.h>
+#include <Adafruit_PWMServoDriver.h>
 
+// Crear objetos para cada PCA9685 con sus respectivas direcciones
+Adafruit_PWMServoDriver pca1 = Adafruit_PWMServoDriver(0x40);
+Adafruit_PWMServoDriver pca2 = Adafruit_PWMServoDriver(0x41);
+Adafruit_PWMServoDriver pca3 = Adafruit_PWMServoDriver(0x42);
 //if the IC model is known or the modules is unreadable,you can use this constructed function
-LCDWIKI_KBV my_lcd(ST7789V,A3,A2,A1,A0,10); //model,cs,cd,wr,rd,reset
+//LCDWIKI_KBV my_lcd(ST7789V,A3,A2,A1,A0,A4); //model,cs,cd,wr,rd,reset
 //if the IC model is not known and the modules is readable,you can use this constructed function
-//LCDWIKI_KBV my_lcd(240,320,A3,A2,A1,A0,A4);//width,height,cs,cd,wr,rd,reset
-//uint16_t model = my_lcd.Read_ID();
+LCDWIKI_KBV my_lcd(240,320,A3,A2,A1,A0,A4);//width,height,cs,cd,wr,rd,reset
+
                              /*  r     g    b */
 #define BLACK        0x0000  /*   0,   0,   0 */
 #define BLUE         0x001F  /*   0,   0, 255 */
@@ -93,6 +67,38 @@ LCDWIKI_KBV my_lcd(ST7789V,A3,A2,A1,A0,10); //model,cs,cd,wr,rd,reset
 #define MAXPRESSURE 1000
 
 TouchScreen ts = TouchScreen(XP, YP, XM, YM, 300);
+struct PisoInfo {
+    Adafruit_PWMServoDriver* pca;
+    int puerto;
+};
+
+PisoInfo seccion1[] = {
+    {&pca1, 0},{&pca1, 0}, {&pca1, 1}, {&pca1, 2}, {&pca1, 3}, {&pca1, 4}, {&pca1, 5}, {&pca1, 6}, {&pca1, 7},
+    {&pca1, 8}, {&pca1, 9}, {&pca1, 10}, {&pca1, 11}, {&pca1, 12}, {&pca1, 13}, {&pca1, 14}, {&pca1, 15},
+    {&pca2, 0}, {&pca2, 1}, {&pca2, 2}, {&pca2, 3}
+};
+
+PisoInfo seccion2[] = {
+    {&pca2, 4}, {&pca2, 5}, {&pca2, 6}, {&pca2, 7}, {&pca2, 8}, {&pca2, 9}, {&pca2, 10}, {&pca2, 11},
+    {&pca2, 12}, {&pca2, 13}, {&pca2, 14}, {&pca2, 15}, {&pca3, 0}, {&pca3, 1}, {&pca3, 2}, {&pca3, 3},
+    {&pca3, 4}, {&pca3, 5}, {&pca3, 6}, {&pca3, 7}, {&pca3, 8}, {&pca3, 9}, {&pca3, 10}, {&pca3, 11}
+};
+const int numPisosSeccion1 = sizeof(seccion1) / sizeof(seccion1[0]);
+const int numPisosSeccion2 = sizeof(seccion2) / sizeof(seccion2[0]);
+const int maxPisos = max(numPisosSeccion1, numPisosSeccion2);
+const int pwmMax =500;
+const long menuInterval = 15000;
+const long interval = 600;
+unsigned long currentMillis=0;
+unsigned long previousMillis = 0;
+unsigned long menuPreviosMillis = menuInterval;
+byte  currentMode = 0;
+byte piso = 0;
+byte enable =0; 
+bool subiendo = true;
+int iVar=0;
+bool isEverOn=false;
+
 int reFreshLevel=10;
 typedef struct _button_info
 {
@@ -214,11 +220,14 @@ void setup(void)
 {
   Serial.begin(9600);
   Wire.begin();
-  Wire.setClock(10000);
-  TWCR = 0;
   my_lcd.Init_LCD();
   Serial.println(my_lcd.Read_ID(), HEX);
-  //Serial.println(model);
+  pca1.begin();
+  pca2.begin();
+  pca3.begin();
+  pca1.setPWMFreq(1000);
+  pca2.setPWMFreq(1000);
+  pca3.setPWMFreq(1000);
   my_lcd.Fill_Screen(WHITE); 
   show_menu(reFreshLevel);
 }
@@ -236,10 +245,26 @@ void loop(void)
   TSPoint p = ts.getPoint();
   pinMode(XM, OUTPUT);
   pinMode(YP, OUTPUT);
+  switch (currentMode) {
+    case 1:
+        encendidoSecuencial();
+        break;
+    case 2:
+        efectoSubidaYBajada();
+        break;
+    case 3:
+        iluminacionEstatica();
+        break;
+    case 4:
+        efectoRespiracion();
+        break;
+    case 5:
+        modoAleatorio();
+        break;
+    }
   //show_menu();
   //Serial.println("Ejecutando");
   //delay(100);
-  //repeatReloadMenu();
   if (p.z > MINPRESSURE && p.z < MAXPRESSURE)
   {
     //p.x = my_lcd.Get_Display_Width()-map(p.x, TS_MINX, TS_MAXX, my_lcd.Get_Display_Width(), 0);
@@ -274,27 +299,33 @@ void loop(void)
           switch(i){
             case 0:
               Serial.println("Case0");
-              sendMessage(1,0,0,0);
-              //delay(10);
-              //show_menu(reFreshLevel);
-              //refreshBotton(i);
+              currentMode=1;
+              show_menu(reFreshLevel);
+              refreshBotton(i);
               break;
             case 1:            
               Serial.println("Case1");
-              sendMessage(2,0,0,0);
-              //my_lcd.Fill_Screen(WHITE);              
+              currentMode=2;             
+              show_menu(reFreshLevel);
+              refreshBotton(i);
               break;
             case 2:            
-              Serial.println("Case2");              
-              sendMessage(3,0,0,0);
+              Serial.println("Case2");
+              currentMode=3;
+              show_menu(reFreshLevel);
+              refreshBotton(i);
               break;
             case 3:
               Serial.println("Case3");
-              sendMessage(4,0,0,0);
+              currentMode=4;
+              show_menu(reFreshLevel);
+              refreshBotton(i);
               break;
             case 4:
               Serial.println("Case4");
-              sendMessage(5,0,0,0);
+              currentMode=5;
+              show_menu(reFreshLevel);
+              refreshBotton(i);
               break;
             case 5:
               Serial.println("Case5");
@@ -335,32 +366,119 @@ void loop(void)
     //funtionToLevels(p);
   }
 }
-void repeatReloadMenu(){
-  my_lcd.Init_LCD();              
-  show_menu(reFreshLevel);
-  refreshBotton(i);
+
+void setLuz(PisoInfo* seccion, int piso, int valor) {
+  Serial.println(" - setLuz");
+  seccion[piso].pca->setPWM(seccion[piso].puerto, 0, valor);
+}
+
+void limpiarEstados() {
+  Serial.println(" - Limpiar estados");
+  for (iVar = 0; iVar < maxPisos; iVar++) {
+      //Serial.print(i);
+        if (iVar < numPisosSeccion1) setLuz(seccion1, iVar, 0);
+        if (iVar < numPisosSeccion2) setLuz(seccion2, iVar, 0);
+        delay(1);
   }
-void sendMessage(byte estado,byte edificio, byte pisos, byte enable){  
-  Serial.println(estado);
-  Serial.println(edificio);
-  Serial.println(pisos);  
-  Serial.println(enable);
-  pinMode(A4, INPUT);
-  Wire.beginTransmission(0x08);
-  Wire.write(estado); // Enviar '1' para encender
-  Wire.write(edificio);
-  Wire.write(pisos);
-  Wire.write(enable);
-  byte error = Wire.endTransmission(); // IMPORTANTE: Enviar datos
-  //  byte error = 0;
-    if (error == 0) {
-        Serial.println("Datos enviados correctamente");
-    } else {
-        //Serial.print("Error al enviar datos: ");
-        Serial.println(error);
+   isEverOn=false;
+   piso = 0;
+   subiendo = true;
+}
+void encendidoSecuencial() {
+    currentMillis = millis();
+    if (currentMillis - previousMillis >= interval) {
+      Serial.println(" - Secuencial");
+      Serial.print(currentMillis);
+      previousMillis = currentMillis;
+       if (piso < numPisosSeccion1){
+        setLuz(seccion1, piso, pwmMax);
+        if(piso>0)setLuz(seccion1, piso-1, 0);
+        else setLuz(seccion1, numPisosSeccion1-1, 0);
+       }
+       if (piso < numPisosSeccion2) {
+        setLuz(seccion2, piso, pwmMax);
+        if(piso>0)setLuz(seccion2, piso-1, 0);
+        else setLuz(seccion2, numPisosSeccion2-1, 0);
+       }
+      piso++;
+      if (piso >= maxPisos) {
+          piso = 0;
+      }
     }
 }
 
+void efectoSubidaYBajada() {
+    currentMillis = millis();
+    if (currentMillis - previousMillis >= interval) {
+      Serial.println(" - Subida Bajada");
+      previousMillis = currentMillis;
+      if (piso < numPisosSeccion1){
+      setLuz(seccion1, piso, subiendo ? pwmMax : 0);
+      }
+      if (piso < numPisosSeccion2) {
+      setLuz(seccion2, piso, subiendo ? pwmMax : 0);
+      }
+      piso += (subiendo ? 1 : -1);
+      if (piso >= maxPisos) {
+          subiendo = false;
+          piso = numPisosSeccion1 - 1;
+      } else if (piso < 0) {
+          subiendo = true;
+          piso = 0;
+      }
+    }
+}
+
+void iluminacionEstatica() {
+  Serial.println(" - Todos prendidos");
+  if(isEverOn==false){
+    for (iVar = 0; iVar < maxPisos; iVar++) {
+      //Serial.print(i);
+        if (iVar < numPisosSeccion1) setLuz(seccion1, iVar, 300);
+        if (iVar < numPisosSeccion2) setLuz(seccion2, iVar, 300);
+        delay(1);
+    }
+   isEverOn= true;
+  }
+}
+
+void efectoRespiracion() {
+    static int intensidad = 0;
+    static bool aumentando = true;
+    currentMillis = millis();
+    if (currentMillis - previousMillis >= 30) {
+      Serial.println(" - Respiracion");
+      previousMillis = currentMillis;
+
+      for (iVar = 0; iVar < maxPisos; iVar++) {
+        if (iVar < numPisosSeccion1) setLuz(seccion1, iVar, intensidad);
+        if (iVar < numPisosSeccion2) setLuz(seccion2, iVar, intensidad);
+      }
+      if (aumentando) {
+        intensidad += 6;
+        if (intensidad >= 350) aumentando = false;
+      } else {
+        intensidad -= 33;
+        if (intensidad <= 0) aumentando = true;
+      }
+    }
+}
+
+void modoAleatorio() {
+     currentMillis = millis();
+    if (currentMillis - previousMillis >= interval) {    
+      Serial.println(" - Aleatorio");
+      previousMillis = currentMillis;
+      for (iVar = 0; iVar < numPisosSeccion1; iVar++) {
+        int intensidad = random(0, pwmMax);
+        setLuz(seccion1, iVar, intensidad);
+      }
+      for (iVar = 0; iVar < numPisosSeccion2; iVar++) {
+        int intensidad = random(0, pwmMax);
+        setLuz(seccion2, iVar, intensidad);
+      }
+    }
+}
 
 void funtionToLevels(TSPoint p){
   
@@ -401,10 +519,10 @@ void funtionToLevels(TSPoint p){
                           piso = (byte)numeroEntero;
                           if(9 == i){
                             Serial.println("On");
-                            sendMessage(6,edificio, piso,1);
+                            //sendMessage(6,edificio, piso,1);
                           }else{
                             Serial.println("Off");
-                            sendMessage(6,edificio, piso,0);                          
+                            //sendMessage(6,edificio, piso,0);                          
                           }
                         } else {
                           Serial.println("Error: El número está fuera del rango de byte.");

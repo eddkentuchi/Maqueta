@@ -11,7 +11,7 @@ void setup() {
     Wire.begin(0x08);
     Wire.onReceive(receiveEvent); // Configurar función de recepción de datos
     Serial.begin(9600);
-  
+    Serial.print("Iniciando Nano ");
     // Iniciar los PCA9685
     pca1.begin();
     pca2.begin();
@@ -27,10 +27,10 @@ void setup() {
 }
 
 void loop() {
-    setAllPWM(4096);
+    //setAllPWM(4096);
     digitalWrite(13,HIGH);
     delay(1000); 
-    setAllPWM(0);
+    //setAllPWM(0);
     digitalWrite(13,LOW);
     delay(1000);
 }
@@ -46,12 +46,12 @@ void setAllPWM(int value) {
 //Evento para recibir informacion por I2C
 void receiveEvent(int bytes) {
     Serial.print("Recibiendo ");
-    Serial.print(bytes);
-    Serial.println(" bytes...");
+    //Serial.print(bytes);
+    //Serial.println(" bytes...");
     while (Wire.available()) {
       comandoRecibido = Wire.read();
         //char c = Wire.read();
-        Serial.print(comandoRecibido);
+        //Serial.print(comandoRecibido);
     }
     Serial.println(" - Recibido");
 }

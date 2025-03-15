@@ -37,7 +37,7 @@ const long interval = 600;
 unsigned long currentMillis=0;
 unsigned long previousMillis = 0;
 unsigned long menuPreviosMillis = menuInterval;
-byte  currentMode = 1;
+byte  currentMode = 0;
 byte piso = 0;
 byte edificio =0;
 byte enable =0; 
@@ -56,6 +56,7 @@ void setup() {
     //limpiarEstados();
 
     Wire.begin(0x08);
+    Wire.setClock(10000);
     Wire.onReceive(receiveEvent); // Define la función para recibir datos
     //Wire.onRequest(requestEvent); 
     pca1.begin();
@@ -81,7 +82,7 @@ void loop() {
         }
     }*/
     //Función para avance automatico
-    autoAdvance();
+    //autoAdvance();
     switch (currentMode) {
         case 1:
             encendidoSecuencial();
@@ -232,21 +233,21 @@ void modoAleatorio() {
 }
 void receiveEvent(int bytes) {
     Serial.print("Recibiendo ");
-    Serial.print(bytes);
-    Serial.println(" bytes...");
+    //Serial.print(bytes);
+    //Serial.println(" bytes...");
      // Verifica que se hayan recibido 4 bytes
     if (bytes == 4) {
       currentMode = Wire.read();
       edificio = Wire.read();
       piso = Wire.read();
       enable = Wire.read();
-      Serial.print("Datos recibidos: Estado="); Serial.print(currentMode);
-      Serial.print(", Edificio="); Serial.print(edificio);
-      Serial.print(", Pisos="); Serial.print(piso);
-      Serial.print(", Enable="); Serial.println(enable);
+      Serial.println("Datos recibidos: Estado="); Serial.print(currentMode);
+      Serial.println(", Edificio="); Serial.print(edificio);
+      Serial.println(", Pisos="); Serial.print(piso);
+      Serial.println(", Enable="); Serial.println(enable);
     } else {
       Serial.println("Error: Se esperaban 4 bytes");
     }
     Serial.println(" - Recibido");
-    limpiarEstados();
+    //limpiarEstados();
 }
